@@ -1,4 +1,5 @@
 import { fromUrl } from 'https://cdn.jsdelivr.net/npm/geotiff@3.0.5/+esm';
+import proj4 from 'https://cdn.jsdelivr.net/npm/proj4@2.12.1/+esm';
 
 const STAC = 'https://planetarycomputer.microsoft.com/api/stac/v1';
 const SIGN = 'https://planetarycomputer.microsoft.com/api/sas/v1/sign?href=';
@@ -79,9 +80,40 @@ async function sign(href){
   const j=await r.json(); return j.href;
 }
 async function readBand(url,bbox,size){
-  const tiff=await fromUrl(url); const image=await tiff.getImage();
-  const values=await image.readRasters({bbox,width:size,height:size,resampleMethod:'bilinear',interleave:true});
+  // Gunakan pembacaan pada level GeoTIFF, bukan image.readRasters().
+  // Pada image.readRasters(), parameter bbox dapat diabaikan sehingga seluruh tile
+  // Sentinel-2 (sekitar 10.980 x 10.980 piksel) dibaca dan browser tampak macet.
+  const tiff=await fromUrl(url, {allowFullFile:false});
+  const image=await tiff.getImage();
+  const geoKeys=image.getGeoKeys();
+  const epsg=Number(geoKeys.ProjectedCSTypeGeoKey || geoKeys.GeographicTypeGeoKey || 4326);
+  const rasterBBox=transformBbox(bbox,epsg);
+  const values=await tiff.readRasters({
+    bbox:rasterBBox,
+    width:size,
+    height:size,
+    resampleMethod:'bilinear',
+    interleave:true
+  });
+  if(!values || values.length!==size*size) throw new Error('Potongan raster tidak dapat dibaca dengan ukuran yang diminta.');
   return values;
+}
+function transformBbox(bbox,epsg){
+  if(epsg===4326) return bbox;
+  let def;
+  if(epsg>=32601&&epsg<=32660){
+    def=`+proj=utm +zone=${epsg-32600} +datum=WGS84 +units=m +no_defs`;
+  }else if(epsg>=32701&&epsg<=32760){
+    def=`+proj=utm +zone=${epsg-32700} +south +datum=WGS84 +units=m +no_defs`;
+  }else{
+    throw new Error(`Proyeksi raster EPSG:${epsg} belum didukung.`);
+  }
+  const corners=[
+    [bbox[0],bbox[1]],[bbox[0],bbox[3]],
+    [bbox[2],bbox[1]],[bbox[2],bbox[3]]
+  ].map(pt=>proj4('EPSG:4326',def,pt));
+  const xs=corners.map(p=>p[0]),ys=corners.map(p=>p[1]);
+  return [Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
 }
 function buildNdvi(red,nir,bbox,geo,size,item){
   const canvas=document.createElement('canvas'); canvas.width=size;canvas.height=size;const ctx=canvas.getContext('2d'),img=ctx.createImageData(size,size);
