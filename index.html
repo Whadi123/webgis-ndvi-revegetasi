@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="WebGIS NDVI untuk pemantauan revegetasi berbasis Sentinel-2 dan unggahan shapefile." />
+  <title>RevegWatch NDVI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <span class="eyebrow">WEBGIS PEMANTAUAN REVEGETASI</span>
+      <h1>RevegWatch <span>NDVI</span></h1>
+      <p>Unggah shapefile, pilih periode, lalu analisis kondisi vegetasi dari Sentinel-2.</p>
+    </div>
+    <div class="status-pill" id="appStatus"><span></span> Siap digunakan</div>
+  </header>
+
+  <main class="app-shell">
+    <aside class="sidebar">
+      <section class="panel">
+        <div class="panel-heading">
+          <div class="step">1</div>
+          <div><h2>Area revegetasi</h2><p>ZIP wajib berisi .shp, .shx, .dbf, dan .prj.</p></div>
+        </div>
+        <label class="drop-zone" id="dropZone">
+          <input id="shpInput" type="file" accept=".zip" hidden />
+          <div class="upload-icon">⇧</div>
+          <strong>Klik atau tarik ZIP shapefile</strong>
+          <small id="fileName">Belum ada berkas dipilih</small>
+        </label>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div class="step">2</div>
+          <div><h2>Parameter citra</h2><p>Gunakan periode sempit untuk proses lebih cepat.</p></div>
+        </div>
+        <div class="form-grid">
+          <label>Tanggal awal<input id="startDate" type="date" /></label>
+          <label>Tanggal akhir<input id="endDate" type="date" /></label>
+          <label>Awan maksimum
+            <div class="range-wrap"><input id="cloudCover" type="range" min="0" max="80" value="20" /><output id="cloudOutput">20%</output></div>
+          </label>
+          <label>Resolusi analisis
+            <select id="resolution"><option value="256">Cepat · 256 px</option><option value="512" selected>Seimbang · 512 px</option><option value="768">Detail · 768 px</option></select>
+          </label>
+        </div>
+        <button id="analyzeBtn" class="primary-btn" disabled>Analisis NDVI</button>
+        <p class="helper">Data: Sentinel-2 Level-2A. Band merah B04 dan NIR B08.</p>
+      </section>
+
+      <section class="panel legend-panel">
+        <div class="panel-heading compact"><div><h2>Legenda NDVI</h2></div></div>
+        <div class="legend-row"><i style="--c:#7f3b08"></i><span>&lt; 0,00</span><b>Nonvegetasi</b></div>
+        <div class="legend-row"><i style="--c:#d8b365"></i><span>0,00–0,20</span><b>Sangat rendah</b></div>
+        <div class="legend-row"><i style="--c:#f6e8a8"></i><span>0,20–0,40</span><b>Rendah</b></div>
+        <div class="legend-row"><i style="--c:#b8e186"></i><span>0,40–0,60</span><b>Sedang</b></div>
+        <div class="legend-row"><i style="--c:#4dac26"></i><span>0,60–0,80</span><b>Tinggi</b></div>
+        <div class="legend-row"><i style="--c:#1b5e20"></i><span>&gt; 0,80</span><b>Sangat tinggi</b></div>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <div id="map"></div>
+      <div class="map-tools">
+        <button id="fitBtn" title="Zoom ke area">⌖</button>
+        <button id="clearBtn" title="Hapus hasil">×</button>
+      </div>
+      <div class="progress-card hidden" id="progressCard">
+        <div class="spinner"></div><div><strong id="progressTitle">Memproses…</strong><p id="progressText">Menyiapkan analisis.</p></div>
+      </div>
+
+      <div class="results" id="results">
+        <div class="result-head"><div><span>RINGKASAN HASIL</span><h2 id="sceneTitle">Belum ada analisis</h2></div><button id="downloadBtn" disabled>Unduh CSV</button></div>
+        <div class="metric-grid">
+          <article><span>NDVI rata-rata</span><strong id="meanNdvi">—</strong><small id="meanClass">Menunggu data</small></article>
+          <article><span>NDVI minimum</span><strong id="minNdvi">—</strong><small>Dalam area analisis</small></article>
+          <article><span>NDVI maksimum</span><strong id="maxNdvi">—</strong><small>Dalam area analisis</small></article>
+          <article><span>Tutupan ≥ 0,40</span><strong id="healthyCover">—</strong><small>Vegetasi sedang–sangat tinggi</small></article>
+        </div>
+        <div class="class-table-wrap">
+          <table><thead><tr><th>Kelas</th><th>Rentang</th><th>Jumlah piksel</th><th>Proporsi</th></tr></thead><tbody id="classTable"><tr><td colspan="4" class="empty">Unggah shapefile dan jalankan analisis.</td></tr></tbody></table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>RevegWatch NDVI · Pemantauan revegetasi berbasis data terbuka Sentinel-2</footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/shpjs@6.1.0/dist/shp.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
